@@ -1,0 +1,10 @@
+127.0.0.1 - 853 [30/Jun/2025:14:28:25 ] "POST http://localhost:8000/enhance HTTP/1.1" 200 1024 "https://example.com" "TestAgent/1.0" 150.5 ms
+127.0.0.1 - anonymous [30/Jun/2025:14:29:16 ] "POST http://0.0.0.0:8000/enhance/stream HTTP/1.1" 200 0 "-" "HTTPie" 4.82 ms
+127.0.0.1 - anonymous [30/Jun/2025:14:30:07 ] "POST http://0.0.0.0:8000/enhance/stream HTTP/1.1" 200 0 "-" "HTTPie" 4.25 ms
+127.0.0.1 - 853 [30/Jun/2025:14:31:42 ] "POST http://localhost:8000/enhance HTTP/1.1" 200 1024 "https://example.com" "TestAgent/1.0" 150.5 ms
+testclient - 863 [30/Jun/2025:14:33:50 ] "POST http://testserver/enhance HTTP/1.1" 200 0 "-" "testclient" 8037.09 ms
+127.0.0.1 - 863 [30/Jun/2025:14:34:31 ] "POST http://0.0.0.0:8000/enhance/stream HTTP/1.1" 200 0 "-" "HTTPie" 6.5 ms
+127.0.0.1 - 863 [30/Jun/2025:14:34:33 ] "POST http://0.0.0.0:8000/enhance/stream HTTP/1.1" 200 0 "-" "HTTPie" 7.45 ms
+127.0.0.1 - 863 [30/Jun/2025:14:34:34 ] "POST http://0.0.0.0:8000/enhance/stream HTTP/1.1" 200 0 "-" "HTTPie" 5.0 ms
+127.0.0.1 - anonymous [30/Jun/2025:14:37:26 ] "POST http://0.0.0.0:8000/enhance/stream HTTP/1.1" 200 0 "-" "HTTPie" 3.58 ms
+127.0.0.1 - anonymous [30/Jun/2025:14:38:44 ] "POST http://0.0.0.0:8000/enhance/stream HTTP/1.1" 200 0 "-" "HTTPie" 6.8 ms
