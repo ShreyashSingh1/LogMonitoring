@@ -46,7 +46,7 @@ class LogParser:
             return {
                 "source": source,
                 "log_type": "request",
-                "original_level": content["level"],
+                "level": content["level"].lower(),
                 "timestamp": content["timestamp"],
                 "endpoint": msg["endpoint"],
                 "ip": msg["ip"],
@@ -62,7 +62,7 @@ class LogParser:
             return {
                 "source": source,
                 "log_type": "request",
-                "original_level": content["level"],
+                "level": content["level"].lower(),
                 "timestamp": content["timestamp"],
                 "endpoint": content["path"],
                 "ip": content.get("client_ip", "-"),

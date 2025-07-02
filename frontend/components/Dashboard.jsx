@@ -62,7 +62,7 @@ const Dashboard = () => {
     const handleInfoLog = (log) => {
       setLogs((prev) => ({
         ...prev,
-        info: [log, ...prev.info].slice(0, 100),
+        info: [log, ...prev.info].slice(0, 10),
       }));
       updateStats(log);
     };
@@ -70,7 +70,7 @@ const Dashboard = () => {
     const handleErrorLog = (log) => {
       setLogs((prev) => ({
         ...prev,
-        error: [log, ...prev.error].slice(0, 100),
+        error: [log, ...prev.error].slice(0, 10),
       }));
       updateStats(log);
     };
@@ -78,7 +78,7 @@ const Dashboard = () => {
     const handleRequestLog = (log) => {
       setLogs((prev) => ({
         ...prev,
-        request: [log, ...prev.request].slice(0, 100),
+        request: [log, ...prev.request].slice(0, 10),
       }));
       updateStats(log);
     };
@@ -101,16 +101,28 @@ const Dashboard = () => {
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const [allLogs, statsData] = await Promise.all([
+      const [logsResponse, statsData] = await Promise.all([
         logService.getLogs(),
         logService.getStats(),
       ]);
 
-      // Organize logs by type
+      // Access the logs array from the response
+      const allLogs = logsResponse.logs || [];
+
+      // Organize logs by type and keep only 10 most recent
       const organized = {
-        info: allLogs.filter((log) => log.log_type === "info"),
-        error: allLogs.filter((log) => log.log_type === "error"),
-        request: allLogs.filter((log) => log.log_type === "request"),
+        info: allLogs
+          .filter((log) => log.log_type === "info")
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+          .slice(0, 10),
+        error: allLogs
+          .filter((log) => log.log_type === "error")
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+          .slice(0, 10),
+        request: allLogs
+          .filter((log) => log.log_type === "request")
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+          .slice(0, 10),
       };
       setLogs(organized);
       setStats(statsData);

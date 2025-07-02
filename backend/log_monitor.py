@@ -8,13 +8,16 @@ class LogFileHandler(FileSystemEventHandler):
     def __init__(self, log_queue):
         self.log_queue = log_queue
         self.file_positions = {}
+        self.initial_read_complete = {}  # Track which files have been read initially
         
     def on_modified(self, event):
         if event.is_directory:
             return
             
         if event.src_path.endswith('.log'):
-            self.read_new_lines(event.src_path)
+            # Only process if initial read is complete
+            if self.initial_read_complete.get(event.src_path, False):
+                self.read_new_lines(event.src_path)
     
     def read_new_lines(self, file_path):
         """Read only new lines from the modified file"""
@@ -63,12 +66,14 @@ class LogMonitor:
     def start_monitoring(self):
         """Start monitoring log directories"""
         try:
-            # Monitor node_logs directory and subdirectories
+            # First read existing files
+            self.read_existing_files()
+            
+            # Then start monitoring for changes
             if os.path.exists(self.node_logs_path):
                 self.observer.schedule(self.handler, self.node_logs_path, recursive=True)
                 print(f"Monitoring node logs: {self.node_logs_path}")
             
-            # Monitor python_logs directory
             if os.path.exists(self.python_logs_path):
                 self.observer.schedule(self.handler, self.python_logs_path, recursive=True)
                 print(f"Monitoring python logs: {self.python_logs_path}")
@@ -77,58 +82,47 @@ class LogMonitor:
             self.observer.start()
             print("Log monitoring started successfully")
             
-            # Read existing files on startup
-            self.read_existing_files()
-            
         except Exception as e:
             print(f"Error starting log monitor: {e}")
     
     def read_existing_files(self):
         """Read existing log files on startup"""
-        def read_all_files():
-            time.sleep(2)  # Give some time for system to initialize
-            
+        def process_file(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                    
+                    for line in lines:
+                        line = line.strip()
+                        if line:
+                            log_entry = {
+                                'file_path': file_path,
+                                'content': line,
+                                'timestamp': time.time()
+                            }
+                            self.log_queue.add_log(log_entry)
+                    
+                    # Set file position and mark as read
+                    self.handler.file_positions[file_path] = os.path.getsize(file_path)
+                    self.handler.initial_read_complete[file_path] = True
+                    print(f"Initial read complete for {file_path}")
+                    
+            except Exception as e:
+                print(f"Error reading existing file {file_path}: {e}")
+        
+        # Process node logs
+        if os.path.exists(self.node_logs_path):
             for root, dirs, files in os.walk(self.node_logs_path):
                 for file in files:
                     if file.endswith('.log'):
-                        file_path = os.path.join(root, file)
-                        self.read_file_content(file_path, max_lines=50)  # Read last 50 lines
-            
+                        process_file(os.path.join(root, file))
+        
+        # Process python logs
+        if os.path.exists(self.python_logs_path):
             for root, dirs, files in os.walk(self.python_logs_path):
                 for file in files:
                     if file.endswith('.log'):
-                        file_path = os.path.join(root, file)
-                        self.read_file_content(file_path, max_lines=50)  # Read last 50 lines
-        
-        # Start in background thread
-        thread = threading.Thread(target=read_all_files, daemon=True)
-        thread.start()
-    
-    def read_file_content(self, file_path, max_lines=None):
-        """Read content from a log file"""
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-                
-                # If max_lines specified, take only the last N lines
-                if max_lines and len(lines) > max_lines:
-                    lines = lines[-max_lines:]
-                
-                for line in lines:
-                    line = line.strip()
-                    if line:
-                        log_entry = {
-                            'file_path': file_path,
-                            'content': line,
-                            'timestamp': time.time()
-                        }
-                        self.log_queue.add_log(log_entry)
-                
-                # Update file position
-                self.handler.file_positions[file_path] = f.tell()
-                
-        except Exception as e:
-            print(f"Error reading existing file {file_path}: {e}")
+                        process_file(os.path.join(root, file))
     
     def stop_monitoring(self):
         """Stop monitoring"""

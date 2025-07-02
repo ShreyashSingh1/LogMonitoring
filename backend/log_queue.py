@@ -5,10 +5,10 @@ from log_parser import LogParser
 from json_accumulator import JSONAccumulator
 
 class LogQueue:
-    def __init__(self, socketio):
+    def __init__(self, socketio, json_accumulator=None):
         self.queue = queue.Queue()
         self.socketio = socketio
-        self.json_accumulator = JSONAccumulator()
+        self.json_accumulator = json_accumulator or JSONAccumulator()
         self.log_parser = LogParser()
         self.processing_thread = None
         self.is_running = False
