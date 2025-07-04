@@ -44,13 +44,13 @@ import {
 } from "@mui/icons-material";
 import { format } from "date-fns";
 import ReactJson from "react18-json-view";
-import { useSocket } from "../contexts/SocketContext";
-import { logService } from "../services/api";
+import { useSocket, useSocketApi } from "../hooks/useSocket";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
 
 const LogViewer = () => {
   const { logs: liveLogs, connected } = useSocket();
+  const socketApi = useSocketApi();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -72,7 +72,7 @@ const LogViewer = () => {
   const itemsPerPage = 50;
 
   useEffect(() => {
-    console.log("Search params changed:", {
+    console.log("🔍 LogViewer: Search params changed:", {
       searchTerm,
       searchType,
       page,
@@ -95,20 +95,33 @@ const LogViewer = () => {
 
   useEffect(() => {
     // Merge live logs with fetched logs
+    console.log(
+      `📡 LogViewer: Received ${liveLogs.length} live logs from Socket.IO`
+    );
     if (liveLogs.length > 0) {
       setLogs((prevLogs) => {
-        const newLogs = [...liveLogs, ...prevLogs];
-        // Remove duplicates based on content and timestamp
-        const uniqueLogs = newLogs.filter(
-          (log, index, self) =>
-            index ===
-            self.findIndex(
-              (l) =>
-                l.raw_content === log.raw_content &&
-                l.timestamp === log.timestamp
-            )
+        // Add new logs at the beginning
+        const newLogs = [...liveLogs];
+
+        // Create a Set of existing log identifiers
+        const existingLogIds = new Set(
+          prevLogs.map((log) => `${log.raw_content}-${log.timestamp}`)
         );
-        return uniqueLogs.slice(0, 1000); // Keep only last 1000 logs
+
+        // Only add logs that don't exist
+        const uniqueNewLogs = newLogs.filter(
+          (log) => !existingLogIds.has(`${log.raw_content}-${log.timestamp}`)
+        );
+
+        // Combine and sort by timestamp
+        const combinedLogs = [...uniqueNewLogs, ...prevLogs]
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+          .slice(0, 1000); // Keep only last 1000 logs
+
+        console.log(
+          `✅ LogViewer: Added ${uniqueNewLogs.length} new logs (total: ${combinedLogs.length})`
+        );
+        return combinedLogs;
       });
     }
   }, [liveLogs]);
@@ -118,7 +131,14 @@ const LogViewer = () => {
       setLoading(true);
       setError(null);
 
-      const response = await logService.getLogs({
+      // Skip if socket API not available
+      if (!socketApi) {
+        console.log("🔄 LogViewer: Socket API not available, skipping fetch");
+        setLoading(false);
+        return;
+      }
+
+      const response = await socketApi.getLogs({
         type: "all",
         level: levelFilter !== "all" ? levelFilter : null,
         source: sourceFilter !== "all" ? sourceFilter : null,

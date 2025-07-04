@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect } from "react";
 import {
   Box,
   Card,
@@ -19,102 +19,116 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
-} from '@mui/material'
+  DialogActions,
+} from "@mui/material";
 import {
   Download as DownloadIcon,
   Delete as DeleteIcon,
-  Refresh as RefreshIcon
-} from '@mui/icons-material'
-import { useSocket } from '../contexts/SocketContext'
-import { logService } from '../services/api'
+  Refresh as RefreshIcon,
+} from "@mui/icons-material";
+import { useSocket, useSocketApi } from "../hooks/useSocket";
 
 const Settings = () => {
-  const { connected, clearLogs, clearErrors } = useSocket()
+  const { connected, clearLogs, clearErrors } = useSocket();
+  const socketApi = useSocketApi();
   const [settings, setSettings] = useState({
     maxLogs: 1000,
     maxErrors: 100,
     autoRefresh: true,
     refreshInterval: 5000,
     showNotifications: true,
-    highlightErrors: true
-  })
-  const [stats, setStats] = useState({})
-  const [csvFiles, setCsvFiles] = useState([])
-  const [exportDialogOpen, setExportDialogOpen] = useState(false)
+    highlightErrors: true,
+  });
+  const [stats, setStats] = useState({});
+  const [csvFiles, setCsvFiles] = useState([]);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportSettings, setExportSettings] = useState({
-    startDate: '',
-    endDate: '',
-    source: 'all',
-    level: 'all'
-  })
-  const [saveMessage, setSaveMessage] = useState('')
+    startDate: "",
+    endDate: "",
+    source: "all",
+    level: "all",
+  });
+  const [saveMessage, setSaveMessage] = useState("");
 
   useEffect(() => {
-    fetchStats()
-    loadSettings()
-  }, [])
+    fetchStats();
+    loadSettings();
+  }, []);
 
   const loadSettings = () => {
-    const savedSettings = localStorage.getItem('logMonitorSettings')
+    const savedSettings = localStorage.getItem("logMonitorSettings");
     if (savedSettings) {
-      setSettings(JSON.parse(savedSettings))
+      setSettings(JSON.parse(savedSettings));
     }
-  }
+  };
 
   const saveSettings = () => {
-    localStorage.setItem('logMonitorSettings', JSON.stringify(settings))
-    setSaveMessage('Settings saved successfully!')
-    setTimeout(() => setSaveMessage(''), 3000)
-  }
+    localStorage.setItem("logMonitorSettings", JSON.stringify(settings));
+    setSaveMessage("Settings saved successfully!");
+    setTimeout(() => setSaveMessage(""), 3000);
+  };
 
   const fetchStats = async () => {
     try {
-      const data = await logService.getStats()
-      setStats(data)
-      setCsvFiles(data.csv_files || [])
+      // Skip if socket API not available
+      if (!socketApi) {
+        console.log("🔄 Settings: Socket API not available, skipping fetch");
+        return;
+      }
+
+      const data = await socketApi.getStats();
+      setStats(data);
+      setCsvFiles(data.csv_files || []);
     } catch (error) {
-      console.error('Error fetching stats:', error)
+      console.error("Error fetching stats:", error);
     }
-  }
+  };
 
   const handleSettingChange = (key, value) => {
-    setSettings(prev => ({
+    setSettings((prev) => ({
       ...prev,
-      [key]: value
-    }))
-  }
+      [key]: value,
+    }));
+  };
 
   const handleExport = async () => {
     try {
       // This would typically call an export API endpoint
-      console.log('Exporting with settings:', exportSettings)
-      setExportDialogOpen(false)
-      alert('Export functionality would be implemented here')
+      console.log("Exporting with settings:", exportSettings);
+      setExportDialogOpen(false);
+      alert("Export functionality would be implemented here");
     } catch (error) {
-      console.error('Error exporting:', error)
+      console.error("Error exporting:", error);
     }
-  }
+  };
 
   const handleClearLogs = () => {
-    if (window.confirm('Are you sure you want to clear all live logs? This cannot be undone.')) {
-      clearLogs()
+    if (
+      window.confirm(
+        "Are you sure you want to clear all live logs? This cannot be undone."
+      )
+    ) {
+      clearLogs();
     }
-  }
+  };
 
   const handleClearErrors = () => {
-    if (window.confirm('Are you sure you want to clear all live errors? This cannot be undone.')) {
-      clearErrors()
+    if (
+      window.confirm(
+        "Are you sure you want to clear all live errors? This cannot be undone."
+      )
+    ) {
+      clearErrors();
     }
-  }
+  };
 
   const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  }
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
 
   return (
     <Box>
@@ -141,8 +155,8 @@ const Settings = () => {
                   <ListItemText primary="Connection Status" />
                   <ListItemSecondaryAction>
                     <Chip
-                      label={connected ? 'Connected' : 'Disconnected'}
-                      color={connected ? 'success' : 'error'}
+                      label={connected ? "Connected" : "Disconnected"}
+                      color={connected ? "success" : "error"}
                       size="small"
                     />
                   </ListItemSecondaryAction>
@@ -175,12 +189,14 @@ const Settings = () => {
               <Typography variant="h6" gutterBottom>
                 Display Settings
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 <TextField
                   label="Max Live Logs"
                   type="number"
                   value={settings.maxLogs}
-                  onChange={(e) => handleSettingChange('maxLogs', parseInt(e.target.value))}
+                  onChange={(e) =>
+                    handleSettingChange("maxLogs", parseInt(e.target.value))
+                  }
                   helperText="Maximum number of logs to keep in memory"
                   fullWidth
                 />
@@ -188,7 +204,9 @@ const Settings = () => {
                   label="Max Live Errors"
                   type="number"
                   value={settings.maxErrors}
-                  onChange={(e) => handleSettingChange('maxErrors', parseInt(e.target.value))}
+                  onChange={(e) =>
+                    handleSettingChange("maxErrors", parseInt(e.target.value))
+                  }
                   helperText="Maximum number of errors to keep in memory"
                   fullWidth
                 />
@@ -196,7 +214,12 @@ const Settings = () => {
                   label="Refresh Interval (ms)"
                   type="number"
                   value={settings.refreshInterval}
-                  onChange={(e) => handleSettingChange('refreshInterval', parseInt(e.target.value))}
+                  onChange={(e) =>
+                    handleSettingChange(
+                      "refreshInterval",
+                      parseInt(e.target.value)
+                    )
+                  }
                   helperText="How often to refresh data in milliseconds"
                   fullWidth
                 />
@@ -212,12 +235,14 @@ const Settings = () => {
               <Typography variant="h6" gutterBottom>
                 Notification Settings
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 <FormControlLabel
                   control={
                     <Switch
                       checked={settings.autoRefresh}
-                      onChange={(e) => handleSettingChange('autoRefresh', e.target.checked)}
+                      onChange={(e) =>
+                        handleSettingChange("autoRefresh", e.target.checked)
+                      }
                     />
                   }
                   label="Auto Refresh"
@@ -226,7 +251,12 @@ const Settings = () => {
                   control={
                     <Switch
                       checked={settings.showNotifications}
-                      onChange={(e) => handleSettingChange('showNotifications', e.target.checked)}
+                      onChange={(e) =>
+                        handleSettingChange(
+                          "showNotifications",
+                          e.target.checked
+                        )
+                      }
                     />
                   }
                   label="Show Browser Notifications"
@@ -235,7 +265,9 @@ const Settings = () => {
                   control={
                     <Switch
                       checked={settings.highlightErrors}
-                      onChange={(e) => handleSettingChange('highlightErrors', e.target.checked)}
+                      onChange={(e) =>
+                        handleSettingChange("highlightErrors", e.target.checked)
+                      }
                     />
                   }
                   label="Highlight Errors"
@@ -252,7 +284,7 @@ const Settings = () => {
               <Typography variant="h6" gutterBottom>
                 Data Management
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 <Button
                   variant="outlined"
                   startIcon={<RefreshIcon />}
@@ -312,8 +344,10 @@ const Settings = () => {
                         startIcon={<DownloadIcon />}
                         onClick={() => {
                           // This would typically trigger a file download
-                          console.log('Download file:', file.name)
-                          alert('Download functionality would be implemented here')
+                          console.log("Download file:", file.name);
+                          alert(
+                            "Download functionality would be implemented here"
+                          );
                         }}
                       >
                         Download
@@ -353,12 +387,17 @@ const Settings = () => {
       >
         <DialogTitle>Export Logs</DialogTitle>
         <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
             <TextField
               label="Start Date"
               type="date"
               value={exportSettings.startDate}
-              onChange={(e) => setExportSettings(prev => ({ ...prev, startDate: e.target.value }))}
+              onChange={(e) =>
+                setExportSettings((prev) => ({
+                  ...prev,
+                  startDate: e.target.value,
+                }))
+              }
               InputLabelProps={{ shrink: true }}
               fullWidth
             />
@@ -366,7 +405,12 @@ const Settings = () => {
               label="End Date"
               type="date"
               value={exportSettings.endDate}
-              onChange={(e) => setExportSettings(prev => ({ ...prev, endDate: e.target.value }))}
+              onChange={(e) =>
+                setExportSettings((prev) => ({
+                  ...prev,
+                  endDate: e.target.value,
+                }))
+              }
               InputLabelProps={{ shrink: true }}
               fullWidth
             />
@@ -374,11 +418,13 @@ const Settings = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setExportDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleExport} variant="contained">Export</Button>
+          <Button onClick={handleExport} variant="contained">
+            Export
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
-  )
-}
+  );
+};
 
-export default Settings 
+export default Settings;

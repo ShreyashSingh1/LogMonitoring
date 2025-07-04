@@ -15,14 +15,17 @@ import {
   Paper,
   Chip,
   Alert,
+  AlertTitle,
   Tabs,
   Tab,
+  Button,
 } from "@mui/material";
 import {
   Error as ErrorIcon,
   Warning as WarningIcon,
   Info as InfoIcon,
   CheckCircle as SuccessIcon,
+  Refresh as RefreshIcon,
 } from "@mui/icons-material";
 import {
   LineChart,
@@ -36,12 +39,12 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { useSocket } from "../contexts/SocketContext";
-import { logService } from "../services/api";
+import { useSocket, useSocketApi } from "../hooks/useSocket";
 import { format, parseISO } from "date-fns";
 
 const Dashboard = () => {
-  const socket = useSocket();
+  const { socket, connected, reconnect, connectionAttempts } = useSocket();
+  const socketApi = useSocketApi();
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
@@ -52,58 +55,153 @@ const Dashboard = () => {
   });
   const [chartData, setChartData] = useState([]);
 
+  // Fetch initial data on component mount
   useEffect(() => {
     fetchInitialData();
   }, []);
 
+  // Handle real-time log updates from socket
   useEffect(() => {
-    if (!socket.socket) return; // Wait for socket to be initialized
+    if (!socket) {
+      console.log("⏳ Dashboard: Waiting for socket connection...");
+      return;
+    }
 
-    const handleInfoLog = (log) => {
-      setLogs((prev) => ({
-        ...prev,
-        info: [log, ...prev.info].slice(0, 10),
-      }));
-      updateStats(log);
+    console.log("🔌 Dashboard: Setting up Socket.IO listeners");
+
+    const handleConnectionEstablished = (data) => {
+      console.log(
+        "🤝 Dashboard: Processing connection established data:",
+        data
+      );
+
+      // Set initial stats
+      if (data.stats) {
+        setStats(data.stats);
+        console.log("📊 Dashboard: Set initial stats:", data.stats);
+      }
+
+      // Set initial logs if provided
+      if (data.recent_logs && Array.isArray(data.recent_logs)) {
+        console.log(
+          `📝 Dashboard: Processing ${data.recent_logs.length} recent logs`
+        );
+
+        // Organize logs by type and keep only 10 most recent
+        const organized = {
+          info: data.recent_logs
+            .filter((log) => log.log_type === "info")
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+            .slice(0, 10),
+          error: data.recent_logs
+            .filter((log) => log.log_type === "error")
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+            .slice(0, 10),
+          request: data.recent_logs
+            .filter((log) => log.log_type === "request")
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+            .slice(0, 10),
+        };
+
+        setLogs(organized);
+        console.log("📝 Dashboard: Set initial logs:", organized);
+
+        // Update chart data with recent logs
+        updateChartData(data.recent_logs);
+      }
+
+      setLoading(false);
     };
 
-    const handleErrorLog = (log) => {
-      setLogs((prev) => ({
-        ...prev,
-        error: [log, ...prev.error].slice(0, 10),
-      }));
-      updateStats(log);
+    const handleNewLog = (log) => {
+      console.log(`📝 Dashboard: Received ${log.log_type} log:`, log);
+
+      // Update logs state based on log type
+      setLogs((prev) => {
+        const logType = log.log_type || "info";
+        return {
+          ...prev,
+          [logType]: [log, ...(prev[logType] || [])].slice(0, 10),
+        };
+      });
+
+      // Update chart data
+      setChartData((prevData) => {
+        const now = new Date();
+        const logTime = parseISO(log.timestamp);
+        const hoursDiff = Math.floor((now - logTime) / (1000 * 60 * 60));
+
+        if (hoursDiff >= 0 && hoursDiff < 24) {
+          return prevData.map((interval, index) => {
+            if (index === 23 - hoursDiff) {
+              const updatedInterval = { ...interval };
+              if (log.log_type === "error") updatedInterval.errors++;
+              else if (log.level === "warning") updatedInterval.warnings++;
+              else if (log.log_type === "info") updatedInterval.info++;
+              else if (log.log_type === "request") updatedInterval.requests++;
+              return updatedInterval;
+            }
+            return interval;
+          });
+        }
+        return prevData;
+      });
     };
 
-    const handleRequestLog = (log) => {
-      setLogs((prev) => ({
-        ...prev,
-        request: [log, ...prev.request].slice(0, 10),
-      }));
-      updateStats(log);
-    };
+    // Setup socket listeners for all log types
+    socket.on("connection_established", handleConnectionEstablished);
+    socket.on("new_log", handleNewLog);
+    socket.on("new_info_log", handleNewLog);
+    socket.on("new_error_log", handleNewLog);
+    socket.on("new_request_log", handleNewLog);
 
-    // Setup socket listeners
-    socket.socket.on("new_info_log", handleInfoLog);
-    socket.socket.on("new_error_log", handleErrorLog);
-    socket.socket.on("new_request_log", handleRequestLog);
+    // Add stats update listener
+    socket.on("stats_update", (newStats) => {
+      console.log("📊 Dashboard: Received stats update:", newStats);
+      setStats(newStats);
+    });
 
     // Cleanup listeners on unmount
     return () => {
-      if (socket.socket) {
-        socket.socket.off("new_info_log", handleInfoLog);
-        socket.socket.off("new_error_log", handleErrorLog);
-        socket.socket.off("new_request_log", handleRequestLog);
+      if (socket) {
+        console.log("🧹 Dashboard: Cleaning up Socket.IO listeners");
+        socket.off("connection_established", handleConnectionEstablished);
+        socket.off("new_log", handleNewLog);
+        socket.off("new_info_log", handleNewLog);
+        socket.off("new_error_log", handleNewLog);
+        socket.off("new_request_log", handleNewLog);
+        socket.off("stats_update");
       }
     };
-  }, [socket.socket]); // Only re-run when socket instance changes
+  }, [socket]); // Only re-run when socket instance changes
+
+  // Show connection status
+  useEffect(() => {
+    console.log(
+      `Socket connection status: ${connected ? "Connected" : "Disconnected"}`
+    );
+  }, [connected]);
 
   const fetchInitialData = async () => {
     try {
       setLoading(true);
+      console.log("🔄 Dashboard: Starting initial data fetch...");
+
+      // If connected, we'll get data from connection_established event
+      // This is just a fallback if we need to manually fetch data
+      if (!socketApi || !connected) {
+        console.log(
+          "🔄 Dashboard: Socket API not available or not connected, waiting for connection..."
+        );
+        // Don't set loading to false here, let connection_established handle it
+        return;
+      }
+
+      // Fallback: manually fetch data if connection_established didn't provide it
+      console.log("🔄 Dashboard: Manually fetching data as fallback...");
       const [logsResponse, statsData] = await Promise.all([
-        logService.getLogs(),
-        logService.getStats(),
+        socketApi.getLogs(),
+        socketApi.getStats(),
       ]);
 
       // Access the logs array from the response
@@ -127,25 +225,11 @@ const Dashboard = () => {
       setLogs(organized);
       setStats(statsData);
       updateChartData(allLogs);
+      setLoading(false);
     } catch (error) {
       console.error("Error fetching data:", error);
-    } finally {
       setLoading(false);
     }
-  };
-
-  const updateStats = (newLog) => {
-    setStats((prev) => {
-      const updated = { ...prev };
-      updated.total_logs++;
-      updated.by_type[newLog.log_type] =
-        (updated.by_type[newLog.log_type] || 0) + 1;
-      updated.by_source[newLog.source] =
-        (updated.by_source[newLog.source] || 0) + 1;
-      updated.by_level[newLog.level] =
-        (updated.by_level[newLog.level] || 0) + 1;
-      return updated;
-    });
   };
 
   const updateChartData = (logs) => {
@@ -308,17 +392,45 @@ const Dashboard = () => {
   }
 
   return (
-    <Box>
+    <Box sx={{ p: 3 }}>
+      {/* Connection Status Alert */}
+      {!connected && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={reconnect}
+              startIcon={<RefreshIcon />}
+            >
+              Reconnect
+            </Button>
+          }
+        >
+          <AlertTitle>Connection Lost</AlertTitle>
+          Disconnected from log monitoring server. Real-time updates are not
+          available.
+          {connectionAttempts > 0 && (
+            <Box component="span" sx={{ ml: 1 }}>
+              (Attempt {connectionAttempts})
+            </Box>
+          )}
+        </Alert>
+      )}
+
+      {/* Connected Status */}
+      {connected && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          <AlertTitle>Connected</AlertTitle>
+          Receiving real-time log updates
+        </Alert>
+      )}
+
       <Typography variant="h4" gutterBottom>
         Dashboard
       </Typography>
-
-      {!socket.connected && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          Disconnected from log monitoring server. Real-time updates are not
-          available.
-        </Alert>
-      )}
 
       <Grid container spacing={3}>
         {/* Stats Cards */}

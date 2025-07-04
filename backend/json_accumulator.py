@@ -13,6 +13,9 @@ class JSONAccumulator:
         self.current_week = self._get_current_week()
         self.processed_logs = set()  # Store hashes of processed logs
         
+        # Load existing log hashes to prevent duplicates on startup
+        self._load_existing_log_hashes()
+        
     def _get_current_week(self):
         """Returns current year and week number (e.g., '2025_W27')"""
         return datetime.now().strftime("%Y_W%V")
@@ -47,7 +50,7 @@ class JSONAccumulator:
                 
                 # Skip if already processed
                 if log_hash in self.processed_logs:
-                    print(f"Skipping duplicate log: {log_entry.get('message', '')[:50]}...")
+                    print(f"⏭️ JSON Accumulator: Skipping duplicate log: {log_entry.get('message', '')[:50]}...")
                     return
                 
                 # Ensure the directory exists
@@ -75,7 +78,7 @@ class JSONAccumulator:
             level = parsed_log.get('level', '').lower()
             file_path = parsed_log.get('file_path', '')
             
-            print(f"Adding log: source={source}, level={level}, file_path={file_path}")
+            print(f"📄 JSON Accumulator: Processing log - source={source}, level={level}, file={os.path.basename(file_path)}")
             
             # Add timestamp if not present
             if 'timestamp' not in parsed_log:
@@ -85,22 +88,22 @@ class JSONAccumulator:
             if ((source == "python" and "access-" in file_path) or 
                 (source == "node" and "requestsLogs" in file_path)):
                 self._append_to_file(self._get_file_path("request", week), parsed_log)
-                print(f"Added to unified REQUEST file")
+                print(f"✅ JSON Accumulator: Added to unified REQUEST file")
             
             # UNIFIED ERROR LOGS: Python error + Python warning + Node.js error  
             elif ((source == "python" and ("error-" in file_path or "warning-" in file_path)) or
                   (source == "node" and "errorLogs" in file_path)):
                 self._append_to_file(self._get_file_path("error", week), parsed_log)
-                print(f"Added to unified ERROR file")
+                print(f"✅ JSON Accumulator: Added to unified ERROR file")
             
             # UNIFIED INFO LOGS: Python info + Node.js access
             elif ((source == "python" and "info-" in file_path) or
                   (source == "node" and "accessLogs" in file_path)):
                 self._append_to_file(self._get_file_path("info", week), parsed_log)
-                print(f"Added to unified INFO file")
+                print(f"✅ JSON Accumulator: Added to unified INFO file")
             
             else:
-                print(f"Log not categorized: source={source}, file_path={file_path}")
+                print(f"⚠️ JSON Accumulator: Log not categorized - source={source}, file={os.path.basename(file_path)}")
             
         except Exception as e:
             print(f"Error adding log: {e}")

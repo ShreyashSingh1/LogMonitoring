@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect } from "react";
 import {
   Box,
   Card,
@@ -16,8 +16,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper
-} from '@mui/material'
+  Paper,
+} from "@mui/material";
 import {
   LineChart,
   Line,
@@ -32,193 +32,216 @@ import {
   Bar,
   PieChart,
   Pie,
-  Cell
-} from 'recharts'
-import { format, subDays, startOfDay, endOfDay } from 'date-fns'
-import { useSocket } from '../contexts/SocketContext'
-import { logService } from '../services/api'
+  Cell,
+} from "recharts";
+import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { useSocket, useSocketApi } from "../hooks/useSocket";
 
 const Analytics = () => {
-  const { logs: liveLogs } = useSocket()
-  const [stats, setStats] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [timeRange, setTimeRange] = useState('24h')
-  const [chartData, setChartData] = useState([])
-  const [sourceStats, setSourceStats] = useState([])
-  const [errorTrends, setErrorTrends] = useState([])
+  const { logs: liveLogs } = useSocket();
+  const socketApi = useSocketApi();
+  const [stats, setStats] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState("24h");
+  const [chartData, setChartData] = useState([]);
+  const [sourceStats, setSourceStats] = useState([]);
+  const [errorTrends, setErrorTrends] = useState([]);
 
   useEffect(() => {
-    fetchAnalytics()
-  }, [timeRange])
+    fetchAnalytics();
+  }, [timeRange]);
 
   useEffect(() => {
     if (liveLogs.length > 0) {
-      updateRealTimeAnalytics()
+      updateRealTimeAnalytics();
     }
-  }, [liveLogs])
+  }, [liveLogs]);
 
   const fetchAnalytics = async () => {
     try {
-      setLoading(true)
-      const data = await logService.getStats()
-      setStats(data)
-      generateChartData()
+      setLoading(true);
+
+      // Skip if socket API not available
+      if (!socketApi) {
+        console.log("🔄 Analytics: Socket API not available, skipping fetch");
+        setLoading(false);
+        return;
+      }
+
+      const data = await socketApi.getStats();
+      setStats(data);
+      generateChartData();
     } catch (error) {
-      console.error('Error fetching analytics:', error)
+      console.error("Error fetching analytics:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const updateRealTimeAnalytics = () => {
-    generateChartData()
-    generateSourceStats()
-    generateErrorTrends()
-  }
+    generateChartData();
+    generateSourceStats();
+    generateErrorTrends();
+  };
 
   const generateChartData = () => {
-    const now = new Date()
-    let intervals = []
-    let intervalCount = 24
-    let intervalDuration = 60 * 60 * 1000 // 1 hour
+    const now = new Date();
+    let intervals = [];
+    let intervalCount = 24;
+    let intervalDuration = 60 * 60 * 1000; // 1 hour
 
     switch (timeRange) {
-      case '1h':
-        intervalCount = 12
-        intervalDuration = 5 * 60 * 1000 // 5 minutes
-        break
-      case '24h':
-        intervalCount = 24
-        intervalDuration = 60 * 60 * 1000 // 1 hour
-        break
-      case '7d':
-        intervalCount = 7
-        intervalDuration = 24 * 60 * 60 * 1000 // 1 day
-        break
-      case '30d':
-        intervalCount = 30
-        intervalDuration = 24 * 60 * 60 * 1000 // 1 day
-        break
+      case "1h":
+        intervalCount = 12;
+        intervalDuration = 5 * 60 * 1000; // 5 minutes
+        break;
+      case "24h":
+        intervalCount = 24;
+        intervalDuration = 60 * 60 * 1000; // 1 hour
+        break;
+      case "7d":
+        intervalCount = 7;
+        intervalDuration = 24 * 60 * 60 * 1000; // 1 day
+        break;
+      case "30d":
+        intervalCount = 30;
+        intervalDuration = 24 * 60 * 60 * 1000; // 1 day
+        break;
     }
 
     // Create time intervals
     for (let i = intervalCount - 1; i >= 0; i--) {
-      const time = new Date(now.getTime() - i * intervalDuration)
+      const time = new Date(now.getTime() - i * intervalDuration);
       intervals.push({
-        time: timeRange === '7d' || timeRange === '30d' 
-          ? format(time, 'MMM dd') 
-          : format(time, 'HH:mm'),
+        time:
+          timeRange === "7d" || timeRange === "30d"
+            ? format(time, "MMM dd")
+            : format(time, "HH:mm"),
         errors: 0,
         warnings: 0,
         info: 0,
-        total: 0
-      })
+        total: 0,
+      });
     }
 
     // Count logs by interval
-    liveLogs.forEach(log => {
-      const logTime = new Date(log.timestamp)
-      const timeDiff = now - logTime
-      const intervalIndex = Math.floor(timeDiff / intervalDuration)
-      
+    liveLogs.forEach((log) => {
+      const logTime = new Date(log.timestamp);
+      const timeDiff = now - logTime;
+      const intervalIndex = Math.floor(timeDiff / intervalDuration);
+
       if (intervalIndex >= 0 && intervalIndex < intervalCount) {
-        const interval = intervals[intervalCount - 1 - intervalIndex]
+        const interval = intervals[intervalCount - 1 - intervalIndex];
         if (interval) {
-          interval.total++
-          const level = log.level?.toLowerCase()
-          if (level === 'error') interval.errors++
-          else if (level === 'warn' || level === 'warning') interval.warnings++
-          else interval.info++
+          interval.total++;
+          const level = log.level?.toLowerCase();
+          if (level === "error") interval.errors++;
+          else if (level === "warn" || level === "warning") interval.warnings++;
+          else interval.info++;
         }
       }
-    })
+    });
 
-    setChartData(intervals)
-  }
+    setChartData(intervals);
+  };
 
   const generateSourceStats = () => {
-    const sources = {}
-    liveLogs.forEach(log => {
+    const sources = {};
+    liveLogs.forEach((log) => {
       if (log.source) {
         if (!sources[log.source]) {
-          sources[log.source] = { name: log.source, total: 0, errors: 0, warnings: 0 }
+          sources[log.source] = {
+            name: log.source,
+            total: 0,
+            errors: 0,
+            warnings: 0,
+          };
         }
-        sources[log.source].total++
-        const level = log.level?.toLowerCase()
-        if (level === 'error') sources[log.source].errors++
-        else if (level === 'warn' || level === 'warning') sources[log.source].warnings++
+        sources[log.source].total++;
+        const level = log.level?.toLowerCase();
+        if (level === "error") sources[log.source].errors++;
+        else if (level === "warn" || level === "warning")
+          sources[log.source].warnings++;
       }
-    })
+    });
 
-    setSourceStats(Object.values(sources))
-  }
+    setSourceStats(Object.values(sources));
+  };
 
   const generateErrorTrends = () => {
-    const trends = []
-    const now = new Date()
-    
-    for (let i = 6; i >= 0; i--) {
-      const day = subDays(now, i)
-      const dayStart = startOfDay(day)
-      const dayEnd = endOfDay(day)
-      
-      const dayLogs = liveLogs.filter(log => {
-        const logTime = new Date(log.timestamp)
-        return logTime >= dayStart && logTime <= dayEnd
-      })
+    const trends = [];
+    const now = new Date();
 
-      const errors = dayLogs.filter(log => log.level?.toLowerCase() === 'error').length
-      const warnings = dayLogs.filter(log => log.level?.toLowerCase() === 'warn' || log.level?.toLowerCase() === 'warning').length
+    for (let i = 6; i >= 0; i--) {
+      const day = subDays(now, i);
+      const dayStart = startOfDay(day);
+      const dayEnd = endOfDay(day);
+
+      const dayLogs = liveLogs.filter((log) => {
+        const logTime = new Date(log.timestamp);
+        return logTime >= dayStart && logTime <= dayEnd;
+      });
+
+      const errors = dayLogs.filter(
+        (log) => log.level?.toLowerCase() === "error"
+      ).length;
+      const warnings = dayLogs.filter(
+        (log) =>
+          log.level?.toLowerCase() === "warn" ||
+          log.level?.toLowerCase() === "warning"
+      ).length;
 
       trends.push({
-        date: format(day, 'MMM dd'),
+        date: format(day, "MMM dd"),
         errors,
         warnings,
-        total: dayLogs.length
-      })
+        total: dayLogs.length,
+      });
     }
 
-    setErrorTrends(trends)
-  }
+    setErrorTrends(trends);
+  };
 
   const levelDistribution = [
     {
-      name: 'Error',
+      name: "Error",
       value: stats.level_distribution?.error || 0,
-      color: '#f44336'
+      color: "#f44336",
     },
     {
-      name: 'Warning',
-      value: (stats.level_distribution?.warn || 0) + (stats.level_distribution?.warning || 0),
-      color: '#ff9800'
+      name: "Warning",
+      value:
+        (stats.level_distribution?.warn || 0) +
+        (stats.level_distribution?.warning || 0),
+      color: "#ff9800",
     },
     {
-      name: 'Info',
+      name: "Info",
       value: stats.level_distribution?.info || 0,
-      color: '#2196f3'
-    }
-  ]
+      color: "#2196f3",
+    },
+  ];
 
   const topErrors = liveLogs
-    .filter(log => log.level?.toLowerCase() === 'error')
+    .filter((log) => log.level?.toLowerCase() === "error")
     .reduce((acc, log) => {
-      const key = log.message?.substring(0, 100) || 'Unknown error'
-      acc[key] = (acc[key] || 0) + 1
-      return acc
-    }, {})
+      const key = log.message?.substring(0, 100) || "Unknown error";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
 
   const topErrorsList = Object.entries(topErrors)
-    .sort(([,a], [,b]) => b - a)
+    .sort(([, a], [, b]) => b - a)
     .slice(0, 10)
-    .map(([message, count]) => ({ message, count }))
+    .map(([message, count]) => ({ message, count }));
 
   if (loading) {
     return (
-      <Box sx={{ width: '100%', mt: 2 }}>
+      <Box sx={{ width: "100%", mt: 2 }}>
         <LinearProgress />
         <Typography sx={{ mt: 2 }}>Loading analytics...</Typography>
       </Box>
-    )
+    );
   }
 
   return (
@@ -380,9 +403,9 @@ const Analytics = () => {
                             variant="body2"
                             sx={{
                               maxWidth: 600,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
                             }}
                           >
                             {error.message}
@@ -403,7 +426,7 @@ const Analytics = () => {
         </Grid>
       </Grid>
     </Box>
-  )
-}
+  );
+};
 
-export default Analytics 
+export default Analytics;

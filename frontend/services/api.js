@@ -1,40 +1,62 @@
-import axios from "axios";
-
-const API_BASE_URL = "http://localhost:5000/api";
-
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 10000,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-// Request interceptor
-api.interceptors.request.use(
-  (config) => {
-    console.log(
-      `Making ${config.method.toUpperCase()} request to ${config.url}`
-    );
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
+// Socket-based API service for real-time communication
+class SocketLogService {
+  constructor(socket) {
+    this.socket = socket;
+    this.pendingRequests = new Map();
   }
-);
 
-// Response interceptor
-api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  (error) => {
-    console.error("API Error:", error);
-    return Promise.reject(error);
+  // Helper method to make socket requests with promises
+  _makeSocketRequest(event, data = {}, responseEvent) {
+    return new Promise((resolve, reject) => {
+      if (!this.socket || !this.socket.connected) {
+        reject(new Error("Socket not connected"));
+        return;
+      }
+
+      const requestId = `${event}_${Date.now()}_${Math.random()}`;
+
+      // Set up response listener
+      const handleResponse = (response) => {
+        this.socket.off(responseEvent, handleResponse);
+        this.socket.off("error", handleError);
+        this.pendingRequests.delete(requestId);
+        resolve(response);
+      };
+
+      const handleError = (error) => {
+        this.socket.off(responseEvent, handleResponse);
+        this.socket.off("error", handleError);
+        this.pendingRequests.delete(requestId);
+        reject(new Error(error.message || "Socket request failed"));
+      };
+
+      // Store the request
+      this.pendingRequests.set(requestId, {
+        resolve,
+        reject,
+        event,
+        responseEvent,
+      });
+
+      // Set up listeners
+      this.socket.on(responseEvent, handleResponse);
+      this.socket.on("error", handleError);
+
+      // Send the request
+      this.socket.emit(event, { ...data, requestId });
+
+      // Set timeout
+      setTimeout(() => {
+        if (this.pendingRequests.has(requestId)) {
+          this.socket.off(responseEvent, handleResponse);
+          this.socket.off("error", handleError);
+          this.pendingRequests.delete(requestId);
+          reject(new Error("Request timeout"));
+        }
+      }, 10000); // 10 second timeout
+    });
   }
-);
 
-export const logService = {
   async getLogs({
     type = "all",
     level = null,
@@ -47,33 +69,49 @@ export const logService = {
     search_term = null,
     search_type = null,
   } = {}) {
-    const params = new URLSearchParams();
-    if (type) params.append("type", type);
-    if (level) params.append("level", level);
-    if (source) params.append("source", source);
-    if (week) params.append("week", week);
-    if (page) params.append("page", page);
-    if (per_page) params.append("per_page", per_page);
-    if (start_time) params.append("start_time", start_time);
-    if (end_time) params.append("end_time", end_time);
-    if (search_term) params.append("search_term", search_term);
-    if (search_type) params.append("search_type", search_type);
+    console.log("📡 Socket API: Getting logs with params:", {
+      type,
+      level,
+      source,
+      week,
+      page,
+      per_page,
+      start_time,
+      end_time,
+      search_term,
+      search_type,
+    });
 
-    const response = await fetch(`${API_BASE_URL}/logs?${params}`);
-    if (!response.ok) throw new Error("Failed to fetch logs");
-    return response.json();
-  },
+    return this._makeSocketRequest(
+      "get_logs",
+      {
+        type,
+        level,
+        source,
+        week,
+        page,
+        per_page,
+        start_time,
+        end_time,
+        search_term,
+        search_type,
+      },
+      "logs_response"
+    );
+  }
 
   async getErrorLogs({ week = null, page = 1, per_page = 50 } = {}) {
-    const params = new URLSearchParams();
-    if (week) params.append("week", week);
-    if (page) params.append("page", page);
-    if (per_page) params.append("per_page", per_page);
-
-    const response = await fetch(`${API_BASE_URL}/logs/errors?${params}`);
-    if (!response.ok) throw new Error("Failed to fetch error logs");
-    return response.json();
-  },
+    console.log("📡 Socket API: Getting error logs");
+    return this._makeSocketRequest(
+      "get_error_logs",
+      {
+        week,
+        page,
+        per_page,
+      },
+      "error_logs_response"
+    );
+  }
 
   async getRequestLogs({
     week = null,
@@ -82,35 +120,88 @@ export const logService = {
     page = 1,
     per_page = 50,
   } = {}) {
-    const params = new URLSearchParams();
-    if (week) params.append("week", week);
-    if (source) params.append("source", source);
-    if (status_code) params.append("status_code", status_code);
-    if (page) params.append("page", page);
-    if (per_page) params.append("per_page", per_page);
-
-    const response = await fetch(`${API_BASE_URL}/logs/requests?${params}`);
-    if (!response.ok) throw new Error("Failed to fetch request logs");
-    return response.json();
-  },
+    console.log("📡 Socket API: Getting request logs");
+    return this._makeSocketRequest(
+      "get_request_logs",
+      {
+        week,
+        source,
+        status_code,
+        page,
+        per_page,
+      },
+      "request_logs_response"
+    );
+  }
 
   async getStats(week = null) {
-    const params = new URLSearchParams();
-    if (week) params.append("week", week);
-
-    const response = await fetch(`${API_BASE_URL}/stats?${params}`);
-    if (!response.ok) throw new Error("Failed to fetch stats");
-    return response.json();
-  },
+    console.log("📡 Socket API: Getting stats");
+    return this._makeSocketRequest("get_stats", { week }, "stats_response");
+  }
 
   async getRequestStats(week = null) {
-    const params = new URLSearchParams();
-    if (week) params.append("week", week);
+    console.log("📡 Socket API: Getting request stats");
+    return this._makeSocketRequest(
+      "get_request_stats",
+      { week },
+      "request_stats_response"
+    );
+  }
 
-    const response = await fetch(`${API_BASE_URL}/stats/requests?${params}`);
-    if (!response.ok) throw new Error("Failed to fetch request stats");
-    return response.json();
-  },
+  async getSources(week = null) {
+    console.log("📡 Socket API: Getting sources");
+    return this._makeSocketRequest("get_sources", { week }, "sources_response");
+  }
+
+  async getLevels(week = null) {
+    console.log("📡 Socket API: Getting levels");
+    return this._makeSocketRequest("get_levels", { week }, "levels_response");
+  }
+
+  async searchLogs({
+    q = "",
+    type = null,
+    source = null,
+    level = null,
+    start_time = null,
+    end_time = null,
+    field = "message",
+    page = 1,
+    per_page = 50,
+  } = {}) {
+    console.log("📡 Socket API: Searching logs");
+    return this._makeSocketRequest(
+      "search_logs",
+      {
+        q,
+        type,
+        source,
+        level,
+        start_time,
+        end_time,
+        field,
+        page,
+        per_page,
+      },
+      "search_logs_response"
+    );
+  }
+
+  async getHealth() {
+    console.log("📡 Socket API: Getting health status");
+    return this._makeSocketRequest("get_health", {}, "health_response");
+  }
+
+  // Clean up any pending requests
+  cleanup() {
+    this.pendingRequests.clear();
+  }
+}
+
+// Create a factory function to create the service with a socket
+export const createSocketLogService = (socket) => {
+  return new SocketLogService(socket);
 };
 
-export default api;
+// Main export - Socket-based API is the primary interface
+export default createSocketLogService;
